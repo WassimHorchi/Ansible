@@ -1,0 +1,32 @@
+---
+- name: Configure FortiGate firewall policy lan to wan
+  hosts: Fortigate
+  gather_facts: false
+  connection: httpapi
+  vars:
+    vdom: "root"
+  tasks:
+    - name: Configure firewall policy from lan to wan
+      fortinet.fortios.fortios_firewall_policy:
+        vdom: "{{ vdom }}"
+        state: present
+        firewall_policy:
+          policyid: 1
+          name: "LAN_to_WAN"
+          srcintf:
+            - name: "port2"
+          dstintf:
+            - name: "port1"
+          srcaddr:
+            - name: "all"
+          dstaddr:
+            - name: "all"
+          action: "accept"
+          schedule: "always"
+          service:
+            - name: "ALL"
+          status: "enable"
+
+    - name: Print Policy result
+      debug:
+        var: print_result

@@ -1,0 +1,21 @@
+- name: Configure LAN interface
+  hosts: Fortigate
+  gather_facts: false
+  connection: httpapi
+
+  vars:
+    vdom: "root"
+    interface_ip: "192.168.22.46/24"
+
+  tasks:
+    - name: Configure LAN interface
+      fortinet.fortios.fortios_system_interface:
+        vdom: "{{ vdom }}"
+        state: "present"
+        system_interface:
+          name: "port2"
+          role: "lan"
+          snmp_index: 2
+          alias: "LAN"
+          type: "physical"
+          ip: "{{ interface_ip }}"

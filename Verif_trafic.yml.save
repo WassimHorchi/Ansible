@@ -1,0 +1,12 @@
+llL--- - name: Get FortiGate Firewall Policy Statistics hosts: Fortigate gather_facts: no collections: - fortinet.fortios
+
+  tasks: - name: Get all firewall policies fortinet.fortios.fortios_monitor: host: "192.168.17.137" # Replace with your FortiGate IP username: "admin" # Replace with 
+        your FortiGate username password: "admin" # Replace with your FortiGate password vdom: "root" # Replace with your VDOM if different https: true selector: 
+        "firewall.policy" params:
+          - action: "get" register: policy_stats
+
+    - name: Filter policies with traffic set_fact: policies_with_traffic: "{{ policy_stats.results | selectattr('hit_count', '>', 0) | list }}"
+
+    - name: Show policies with traffic debug: msg: | Policy ID: {{ item.policyid }} Name: {{ item.name }} Hit Count: {{ item.hit_count }} Bytes: {{ item.bytes }} 
+          Sessions: {{ item.sessions }}
+      loop: "{{ policies_with_traffic }}"

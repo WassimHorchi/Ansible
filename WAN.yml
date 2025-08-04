@@ -1,0 +1,28 @@
+---
+- name: Configure FortiGate WAN interface
+  hosts: Fortigate02
+  gather_facts: false
+
+  vars:
+    vdom: "root"
+
+  tasks:
+
+  - name: Configure WAN interface
+    fortinet.fortios.fortios_system_interface:
+      vdom: "root"
+      state: present
+      system_interface:
+        name: "port1"
+        alias: "WAN"
+        type: "physical"
+        snmp_index: 1
+        role: "wan"
+        allowaccess: "https,http,ping,ssh"
+        mode: "dhcp"
+
+    register: interface_result
+
+  - name: Display interface configuration result
+    debug:
+      var: interface_result

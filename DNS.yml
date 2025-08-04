@@ -1,0 +1,21 @@
+---
+- hosts: Fortigate
+  gather_facts: false
+  connection: httpapi
+  collections:
+    - fortinet.fortios
+  vars:
+    vdom: "root"
+    ansible_httpapi_use_ssl: true
+    ansible_httpapi_validate_certs: false
+    ansible_httpapi_port: 443
+  tasks:
+    - name: Configure DNS
+      fortinet.fortios.fortios_system_dns:
+        vdom: "{{ vdom }}"
+        system_dns:
+          primary: "8.8.8.8"
+          secondary: "8.8.4.4"
+          cache_notfound_responses: "disable"
+          dns_cache_limit: "5000"
+          dns_cache_ttl: "1800"

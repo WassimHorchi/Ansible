@@ -1,0 +1,14 @@
+---
+- name: Configure traffic shaper on Fortigate
+  hosts: Fortigate
+  gather_facts: false
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Configure traffic shaper
+      fortios_firewall_shaper_traffic_shaper:
+        vdom: "root"
+        state: "present"
+        firewall_shaper_traffic_shaper:
+          name: "10Mbps"
+          maximum_bandwidth: 10000

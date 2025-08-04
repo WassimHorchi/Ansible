@@ -1,0 +1,51 @@
+---
+- name: Check FortiGate Firewall Policy Traffic
+  hosts: Fortigate
+  gather_facts: no
+  collections:
+    - fortinet.fortios
+
+  vars:
+    vdom_name: "root"
+    specific_policy_id: 1  # Change this to target a different policy
+
+  tasks:
+    - name: Get all firewall policies
+      fortios_monitor_fact:
+        vdom: "{{ vdom_name }}"
+        selector: "firewall_policy"
+      register: policies_result
+
+    - name: Show traffic status for each policy
+      debug:
+        msg: >
+          {% if policy.packets | default(0) > 0 or policy.bytes | default(0) > 0 %}
+          ✅ Policy ID {{ policy.policyid | default('N/A') }} has traffic: {{ policy.packets | default(0) }} packets, {{ policy.bytes | default(0) }} bytes.
+          {% else %}
+          ❌ Policy ID {{ policy.policyid | default('N/A') }} has no traffic.
+          {% endif %}
+      loop: "{{ policies_result.meta.results }}"
+      loop_control:
+        label: "{{ item.policyid | default('N/A') }}"
+      vars:
+        policy: "{{ item }}"
+
+    - name: Get specific policy traffic stats
+      fortios_monitor_fact:
+        vdom: "{{ vdom_name }}"
+        selector: "firewall_policy"
+        params:
+          policyid: "{{ specific_policy_id }}"
+      register: single_policy
+      when: specific_policy_id is defined
+
+    - name: Show specific policy traffic
+      debug:
+        msg: >
+          {% set result = single_policy.meta.results[0] %}
+          {% if result.packets > 0 or result.bytes > 0 %}
+          ✅ Specific Policy ID {{ result.policyid }} has traffic: {{ result.packets }} packets, {{ result.bytes }} bytes.
+          {% else %}
+          ❌ Specific Policy ID {{ result.policyid }} has no traffic.
+          {% endif %}
+      when: single_policy.meta.results is defined and single_policy.meta.results | length > 0

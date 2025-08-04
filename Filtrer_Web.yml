@@ -1,0 +1,142 @@
+- name: Configure web filter profile on Fortigate
+  hosts: Fortigate
+  gather_facts: false
+  collections:
+    - fortinet.fortios
+  connection: httpapi
+  vars:
+    ansible_httpapi_use_ssl: yes
+    ansible_httpapi_validate_certs: no
+    ansible_httpapi_port: 443
+    vdom: "root"
+  tasks:
+    - name: Configure URL filter for YouTube, Facebook, Instagram, and WhatsApp
+      fortios_webfilter_urlfilter:
+        vdom: "{{ vdom }}"
+        state: "present"
+        webfilter_urlfilter:
+          id: 1  # Ajouter l'identifiant ici
+          name: "Social_Media_Filter"
+          entries:
+            - id: 1
+              url: "youtube.com"
+              type: "simple"
+              action: "block"
+            - id: 2
+              url: "facebook.com"
+              type: "simple"
+              action: "block"
+            - id: 3
+              url: "instagram.com"
+              type: "simple"
+              action: "block"
+            - id: 4
+              url: "whatsapp.com"
+              type: "simple"
+              action: "block"
+
+    - name: Configure web filter profile
+      fortios_webfilter_profile:
+        vdom: "{{ vdom }}"
+        state: "present"
+        webfilter_profile:
+          name: "block"
+          web:
+            urlfilter_table: 1
+          ftgd_wf:
+            filters:
+              - id: 1
+                category: 1
+              - id: 2
+                category: 3
+              - id: 3
+                category: 4
+              - id: 4
+                category: 5
+              - id: 5
+                category: 6
+              - id: 6
+                category: 12
+              - id: 7
+                category: 59
+              - id: 8
+                category: 62
+              - id: 9
+                category: 83
+                action: block
+              - id: 10
+                category: 96
+                action: block
+              - id: 11
+                category: 98
+                action: block
+              - id: 12
+                category: 99
+                action: block
+              - id: 13
+                category: 2
+                action: warning
+              - id: 14
+                category: 7
+                action: warning
+              - id: 15
+                category: 8
+                action: warning
+              - id: 16
+                category: 9
+                action: warning
+              - id: 17
+                category: 11
+                action: warning
+              - id: 18
+                category: 13
+                action: warning
+              - id: 19
+                category: 14
+                action: warning
+              - id: 20
+                category: 15
+                action: warning
+              - id: 21
+                category: 16
+                action: warning
+              - id: 22
+                category: 57
+                action: warning
+              - id: 23
+                category: 63
+                action: warning
+              - id: 24
+                category: 64
+                action: warning
+              - id: 25
+                category: 65
+                action: warning
+              - id: 26
+                category: 66
+                action: warning
+              - id: 27
+                category: 67
+                action: warning
+              - id: 28
+                category: 26
+                action: block
+              - id: 29
+                category: 61
+                action: block
+              - id: 30
+                category: 86
+                action: block
+              - id: 31
+                category: 88
+                action: block
+              - id: 32
+                category: 90
+                action: block
+              - id: 33
+                category: 91
+                action: block
+              - id: 34
+                category: 140
+              - id: 35
+                category: 141

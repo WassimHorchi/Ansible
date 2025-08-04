@@ -1,0 +1,40 @@
+---
+- name: Configure FortiGate firewall policy
+  hosts: Fortigate
+  gather_facts: false
+  connection: httpapi
+  vars:
+    vdom: "root"
+  tasks:
+    - name: Configure firewall policy from lan to dmz
+      fortinet.fortios.fortios_firewall_policy:
+        vdom: "{{ vdom }}"
+        state: present
+        firewall_policy:
+          name: "LAN_to_DMZ"
+          srcintf:
+            - name: "port2"
+          dstintf:
+            - name: "port3"
+          srcaddr:
+            - name: "all"
+          dstaddr:
+            - name: "all"
+          action: "accept"
+          schedule: "always"
+          service:
+            - name: "HTTP"
+            - name: "FTP"
+          status: "enable"
+          policyid: 2
+          nat: "enable"
+      register: policy_result
+    - name: Print Policy result
+      debug:
+        var: print_result
+
+
+
+
+
+

@@ -1,0 +1,21 @@
+---
+- name: Créer la VIP "https_access" sur FortiGate
+  hosts: Fortigate
+  gather_facts: no
+  collections:
+    - fortinet.fortios
+
+  vars:
+    vdom: "root"
+
+  tasks:
+    - name: Configurer la VIP "https_access"
+      fortinet.fortios.fortios_firewall_vip:
+        vdom: "{{ vdom }}"
+        state: "present"
+        firewall_vip:
+          name: "https_access"
+          extip: "10.88.8.100"
+          mappedip:
+            - "10.10.10.11"
+          extintf: "port1"
