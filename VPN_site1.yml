@@ -19,7 +19,7 @@
           net_device: "disable"
           proposal: "des-md5"
           comments: "VPN: to site2 (Created by VPN wizard)"
-          remote_gw: "192.168.17.137"
+          remote_gw: "192.168.230.128"
           psksecret: "test12345"
     - name: Configure IPsec Phase2 Interface
       fortinet.fortios.fortios_vpn_ipsec_phase2_interface:
@@ -32,8 +32,8 @@
           comments: "VPN: to site2 (Created by VPN wizard)"
           src_addr_type: "name"
           dst_addr_type: "name"
-          src_name: "to site2_local"
-          dst_name: "to site2_remote"
+          src_name: "to_site2_local"
+          dst_name: "to_site2_remote"
 
     - name: Create firewall policy to site2
       fortinet.fortios.fortios_firewall_policy:
@@ -49,9 +49,9 @@
             - name: "to site2"
           action: "accept"
           srcaddr:
-            - name: "to site2_local"
+            - name: "to_site2_local"
           dstaddr:
-            - name: "to site2_remote"
+            - name: "to_site2_remote"
           schedule: "always"
           service:
             - name: "ALL"
@@ -71,9 +71,9 @@
             - name: "port2"
           action: "accept"
           srcaddr:
-            - name: "to site2_remote"
+            - name: "to_site2_remote"
           dstaddr:
-            - name: "to site2_local"
+            - name: "to_site2_local"
           schedule: "always"
           service:
             - name: "ALL"

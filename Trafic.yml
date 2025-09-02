@@ -3,7 +3,6 @@
   hosts: Fortigate
   gather_facts: false
   connection: local
-  gather_facts: no
   tasks:
     - name: Configure traffic shaper
       fortios_firewall_shaper_traffic_shaper:
