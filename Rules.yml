@@ -1,5 +1,5 @@
 ---
-- name: "Show FortiGate firewall policies with status DISABLED only"
+- name: "Audit FortiGate firewall policies and export to PDF"
   hosts: Fortigate
   connection: httpapi
   gather_facts: no
@@ -8,14 +8,51 @@
 
   vars:
     vdom_name: "root"
+    pdf_dest: "./FortiGate_Policies_Report.pdf"
 
   tasks:
+
+    ####################################################################
+    # 0️⃣ Ensure reportlab is installed (for AWX environments)
+    ####################################################################
+    - name: Install reportlab Python package
+      pip:
+        name: reportlab
+        executable: pip3
+      delegate_to: localhost
+      run_once: true
+
+    ####################################################################
+    # 1️⃣ Get firewall policies from configuration
+    ####################################################################
     - name: Get firewall policies from configuration
       fortios_configuration_fact:
         vdom: "{{ vdom_name }}"
         selector: "firewall_policy"
       register: config_policies
 
+    ####################################################################
+    # 2️⃣ Policies with comments
+    ####################################################################
+    - name: Collect policies with comments
+      set_fact:
+        policies_with_comments: >-
+          {{ config_policies.meta.results
+             | selectattr('comments','defined')
+             | selectattr('comments','truthy')
+             | list }}
+
+    - name: Show policies that have comments
+      debug:
+        msg: "✅ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' → Comment: {{ policy.comments }}"
+      loop: "{{ policies_with_comments }}"
+      loop_control:
+        loop_var: policy
+        label: "{{ policy.name | default('No Name') }}"
+
+    ####################################################################
+    # 3️⃣ Disabled policies
+    ####################################################################
     - name: Show only disabled policies
       debug:
         msg: "⚠️ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' is DISABLED"
@@ -23,6 +60,98 @@
       loop_control:
         loop_var: policy
         label: "{{ policy.name | default('No Name') }}"
-      when:
-        - policy.status is defined
-        - policy.status == "disable"
+      when: policy.status is defined and policy.status == "disable"
+
+    ####################################################################
+    # 4️⃣ Hint=0 / Last used=N/A policies
+    ####################################################################
+    - name: Get runtime stats for firewall policies
+      fortios_monitor_fact:
+        vdom: "{{ vdom_name }}"
+        selector: "firewall_policy"
+      register: monitor_policies
+
+    - name: Normalize monitor policies with defaults
+      set_fact:
+        normalized_monitor_policies: >-
+          {{ monitor_policies.meta.results
+             | map('combine', {'hitcount': 0, 'lastused': 'N/A', 'name': 'No Name'}) 
+             | list }}
+
+    - name: Filter policies where hint = 0 and last used = N/A
+      set_fact:
+        hint0_lastused_na_policies: >-
+          {{ normalized_monitor_policies
+             | selectattr('hitcount', 'equalto', 0)
+             | selectattr('lastused', 'equalto', 'N/A')
+             | list }}
+
+    - name: Show policies where hint = 0 and last used = N/A
+      debug:
+        msg: "⚠️ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' has hint = 0 and Last used = N/A"
+      loop: "{{ hint0_lastused_na_policies }}"
+      loop_control:
+        loop_var: policy
+
+    ####################################################################
+    # 5️⃣ Export all results to PDF
+    ####################################################################
+    - name: Save all results into temporary JSON
+      copy:
+        dest: "/tmp/all_policies_report.json"
+        content: |
+          {
+            "policies_with_comments": {{ policies_with_comments | to_nice_json }},
+            "disabled_policies": {{ config_policies.meta.results | selectattr('status','equalto','disable') | list | to_nice_json }},
+            "hint0_lastused_na_policies": {{ hint0_lastused_na_policies | to_nice_json }}
+          }
+
+    - name: Generate PDF report
+      delegate_to: localhost
+      run_once: true
+      shell: |
+        python3 - <<'EOF'
+        import json
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        pdf_path = "{{ pdf_dest }}"
+
+        with open('/tmp/all_policies_report.json') as f:
+            data = json.load(f)
+
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = [Paragraph('FortiGate Firewall Policies Report', styles['Title']), Spacer(1,20)]
+
+        # Policies with comments
+        story.append(Paragraph('1️⃣ Policies with Comments', styles['Heading2']))
+        story.append(Spacer(1,10))
+        for p in data.get('policies_with_comments', []):
+            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}, Comment: {p.get('comments','')}", styles['Normal']))
+            story.append(Spacer(1,5))
+
+        # Disabled policies
+        story.append(Spacer(1,15))
+        story.append(Paragraph('2️⃣ Disabled Policies', styles['Heading2']))
+        story.append(Spacer(1,10))
+        for p in data.get('disabled_policies', []):
+            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}", styles['Normal']))
+            story.append(Spacer(1,5))
+
+        # Policies where hint=0 and lastused=N/A
+        story.append(Spacer(1,15))
+        story.append(Paragraph('3️⃣ Policies with Hint=0 and Last Used=N/A', styles['Heading2']))
+        story.append(Spacer(1,10))
+        for p in data.get('hint0_lastused_na_policies', []):
+            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}", styles['Normal']))
+            story.append(Spacer(1,5))
+
+        doc.build(story)
+        EOF
+
+    - name: Remove temporary JSON file
+      file:
+        path: "/tmp/all_policies_report.json"
+        state: absent
