@@ -8,7 +8,8 @@
 
   vars:
     vdom_name: "root"
-    pdf_dest: "./FortiGate_Policies_Report.pdf"
+    pdf_dest: "/tmp/FortiGate_Policies_Report.pdf"
+    json_temp: "/tmp/all_policies_report.json"
 
   tasks:
 
@@ -22,7 +23,7 @@
       register: config_policies
 
     ####################################################################
-    # 2️⃣ Policies with comments
+    # 2️⃣ Collect policies with comments
     ####################################################################
     - name: Collect policies with comments
       set_fact:
@@ -32,28 +33,26 @@
              | selectattr('comments','truthy')
              | list }}
 
-    - name: Show policies that have comments
+    - name: Show policies with comments
       debug:
         msg: "✅ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' → Comment: {{ policy.comments }}"
       loop: "{{ policies_with_comments }}"
       loop_control:
         loop_var: policy
-        label: "{{ policy.name | default('No Name') }}"
 
     ####################################################################
-    # 3️⃣ Disabled policies
+    # 3️⃣ Show disabled policies
     ####################################################################
-    - name: Show only disabled policies
+    - name: Show disabled policies
       debug:
         msg: "⚠️ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' is DISABLED"
       loop: "{{ config_policies.meta.results }}"
       loop_control:
         loop_var: policy
-        label: "{{ policy.name | default('No Name') }}"
       when: policy.status is defined and policy.status == "disable"
 
     ####################################################################
-    # 4️⃣ Hint=0 / Last used=N/A policies
+    # 4️⃣ Filter policies where hitcount = 0 and last used = N/A
     ####################################################################
     - name: Get runtime stats for firewall policies
       fortios_monitor_fact:
@@ -65,10 +64,10 @@
       set_fact:
         normalized_monitor_policies: >-
           {{ monitor_policies.meta.results
-             | map('combine', {'hitcount': 0, 'lastused': 'N/A', 'name': 'No Name'}) 
+             | map('combine', {'hitcount': 0, 'lastused': 'N/A', 'name': 'No Name'})
              | list }}
 
-    - name: Filter policies where hint = 0 and last used = N/A
+    - name: Filter policies where hitcount = 0 and last used = N/A
       set_fact:
         hint0_lastused_na_policies: >-
           {{ normalized_monitor_policies
@@ -76,26 +75,41 @@
              | selectattr('lastused', 'equalto', 'N/A')
              | list }}
 
-    - name: Show policies where hint = 0 and last used = N/A
+    - name: Show policies with hitcount = 0 and last used = N/A
       debug:
-        msg: "⚠️ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' has hint = 0 and Last used = N/A"
+        msg: "⚠️ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' has hitcount = 0 and Last used = N/A"
       loop: "{{ hint0_lastused_na_policies }}"
       loop_control:
         loop_var: policy
 
     ####################################################################
-    # 5️⃣ Export all results to PDF
+    # 5️⃣ Save all results to JSON on localhost
     ####################################################################
     - name: Save all results into temporary JSON
       copy:
-        dest: "/tmp/all_policies_report.json"
+        dest: "{{ json_temp }}"
         content: |
           {
             "policies_with_comments": {{ policies_with_comments | to_nice_json }},
             "disabled_policies": {{ config_policies.meta.results | selectattr('status','equalto','disable') | list | to_nice_json }},
             "hint0_lastused_na_policies": {{ hint0_lastused_na_policies | to_nice_json }}
           }
+      delegate_to: localhost
+      run_once: true
 
+    ####################################################################
+    # 6️⃣ Ensure reportlab is installed on localhost
+    ####################################################################
+    - name: Install reportlab on localhost
+      pip:
+        name: reportlab
+        executable: pip3
+      delegate_to: localhost
+      run_once: true
+
+    ####################################################################
+    # 7️⃣ Generate PDF report on localhost
+    ####################################################################
     - name: Generate PDF report
       delegate_to: localhost
       run_once: true
@@ -108,7 +122,8 @@
 
         pdf_path = "{{ pdf_dest }}"
 
-        with open('/tmp/all_policies_report.json') as f:
+        # Load policies JSON file
+        with open('{{ json_temp }}') as f:
             data = json.load(f)
 
         doc = SimpleDocTemplate(pdf_path, pagesize=A4)
@@ -119,7 +134,12 @@
         story.append(Paragraph('1️⃣ Policies with Comments', styles['Heading2']))
         story.append(Spacer(1,10))
         for p in data.get('policies_with_comments', []):
-            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}, Comment: {p.get('comments','')}", styles['Normal']))
+            story.append(Paragraph(
+                f"Policy ID: {p.get('policyid')}, "
+                f"Name: {p.get('name','No Name')}, "
+                f"Comment: {p.get('comments','')}",
+                styles['Normal']
+            ))
             story.append(Spacer(1,5))
 
         # Disabled policies
@@ -127,20 +147,36 @@
         story.append(Paragraph('2️⃣ Disabled Policies', styles['Heading2']))
         story.append(Spacer(1,10))
         for p in data.get('disabled_policies', []):
-            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}", styles['Normal']))
+            story.append(Paragraph(
+                f"Policy ID: {p.get('policyid')}, "
+                f"Name: {p.get('name','No Name')}",
+                styles['Normal']
+            ))
             story.append(Spacer(1,5))
 
-        # Policies where hint=0 and lastused=N/A
+        # Policies where hitcount=0 and lastused=N/A
         story.append(Spacer(1,15))
-        story.append(Paragraph('3️⃣ Policies with Hint=0 and Last Used=N/A', styles['Heading2']))
+        story.append(Paragraph('3️⃣ Policies with Hitcount=0 and Last Used=N/A', styles['Heading2']))
         story.append(Spacer(1,10))
         for p in data.get('hint0_lastused_na_policies', []):
-            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}", styles['Normal']))
+            story.append(Paragraph(
+                f"Policy ID: {p.get('policyid')}, "
+                f"Name: {p.get('name','No Name')}",
+                styles['Normal']
+            ))
             story.append(Spacer(1,5))
 
+        # Build PDF
         doc.build(story)
         EOF
 
+    ####################################################################
+    # 8️⃣ Cleanup temporary JSON on localhost
+    ####################################################################
     - name: Remove temporary JSON file
       file:
-        path: "/tmp/all_policies_report.json"
+        path: "{{ json_temp }}"
+        state: absent
+      delegate_to: localhost
+      run_once: true
+
