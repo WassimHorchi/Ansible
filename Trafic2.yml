@@ -12,7 +12,8 @@
     local_machine_ip: "192.168.230.139"
     local_machine_user: "wassim"
     local_machine_path: "/home/wassim/Desktop/ansible"
-    output_dir: "/home/wassim/Desktop/ansible"
+    # CHANGED: Use /tmp for AWX compatibility
+    output_dir: "/tmp/ansible_output"
     output_file: "{{ output_dir }}/combined_firewall_audit_report.html"
 
   tasks:
@@ -23,6 +24,7 @@
         state: directory
         mode: '0755'
       delegate_to: localhost
+      # REMOVED: No need for become, owner, or group with /tmp
 
     - name: Get current epoch timestamp
       command: date +%s
@@ -157,6 +159,7 @@
           </body>
           </html>
         dest: "{{ output_file }}"
+        mode: '0644'
       delegate_to: localhost
 
     - name: Ensure target directory exists on local machine
