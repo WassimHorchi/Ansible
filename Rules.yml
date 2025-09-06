@@ -1,163 +1,185 @@
 ---
-- name: "Audit FortiGate firewall policies and export to PDF"
+- name: Combined FortiGate Firewall Rule Audit (Unused, No-Comment, Disabled)
   hosts: Fortigate
-  connection: httpapi
   gather_facts: no
-  collections:
-    - fortinet.fortios
+  connection: local
 
   vars:
-    vdom_name: "root"
-    pdf_dest: "/tmp/FortiGate_Policies_Report.pdf"
-    json_temp: "/tmp/all_policies_report.json"
+    vdom: "root"
+    cutoff_days: 10
+    fortigate_token: "50mkw76r8d657jt3nwt71fhnkf3f3j"
+    scp_password: "Fodha123*"
+    local_machine_ip: "192.168.230.139"
+    local_machine_user: "wassim"
+    local_machine_path: "/home/wassim/Desktop/ansible"
+    # CHANGED: Use /tmp for AWX compatibility
+    output_dir: "/tmp/ansible_output"
+    output_file: "{{ output_dir }}/combined_firewall_audit_report.html"
 
   tasks:
 
-    ####################################################################
-    # 1️⃣ Get firewall policies from configuration
-    ####################################################################
-    - name: Get firewall policies from configuration
-      fortios_configuration_fact:
-        vdom: "{{ vdom_name }}"
-        selector: "firewall_policy"
-      register: config_policies
-
-    ####################################################################
-    # 2️⃣ Collect policies with comments
-    ####################################################################
-    - name: Collect policies with comments
-      set_fact:
-        policies_with_comments: >-
-          {{ config_policies.meta.results
-             | selectattr('comments','defined')
-             | selectattr('comments','truthy')
-             | list }}
-
-    - name: Show policies with comments
-      debug:
-        msg: "✅ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' → Comment: {{ policy.comments }}"
-      loop: "{{ policies_with_comments }}"
-      loop_control:
-        loop_var: policy
-
-    ####################################################################
-    # 3️⃣ Show disabled policies
-    ####################################################################
-    - name: Show disabled policies
-      debug:
-        msg: "⚠️ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' is DISABLED"
-      loop: "{{ config_policies.meta.results }}"
-      loop_control:
-        loop_var: policy
-      when: policy.status is defined and policy.status == "disable"
-
-    ####################################################################
-    # 4️⃣ Filter policies where hint = 0 and last used = N/A
-    ####################################################################
-    - name: Get runtime stats for firewall policies
-      fortios_monitor_fact:
-        vdom: "{{ vdom_name }}"
-        selector: "firewall_policy"
-      register: monitor_policies
-
-    - name: Normalize monitor policies with defaults
-      set_fact:
-        normalized_monitor_policies: >-
-          {{ monitor_policies.meta.results
-             | map('combine', {'hitcount': 0, 'lastused': 'N/A', 'name': 'No Name'})
-             | list }}
-
-    - name: Filter policies where hint = 0 and last used = N/A
-      set_fact:
-        hint0_lastused_na_policies: >-
-          {{ normalized_monitor_policies
-             | selectattr('hitcount', 'equalto', 0)
-             | selectattr('lastused', 'equalto', 'N/A')
-             | list }}
-
-    - name: Show policies with hint = 0 and last used = N/A
-      debug:
-        msg: "⚠️ Policy ID {{ policy.policyid }} - '{{ policy.name | default('No Name') }}' has hint = 0 and Last used = N/A"
-      loop: "{{ hint0_lastused_na_policies }}"
-      loop_control:
-        loop_var: policy
-
-    ####################################################################
-    # 5️⃣ Save all results to JSON
-    ####################################################################
-    - name: Save all results into temporary JSON
-      copy:
-        dest: "{{ json_temp }}"
-        content: |
-          {
-            "policies_with_comments": {{ policies_with_comments | to_nice_json }},
-            "disabled_policies": {{ config_policies.meta.results | selectattr('status','equalto','disable') | list | to_nice_json }},
-            "hint0_lastused_na_policies": {{ hint0_lastused_na_policies | to_nice_json }}
-          }
-
-    ####################################################################
-    # 6️⃣ Ensure reportlab is installed on localhost
-    ####################################################################
-    - name: Install reportlab on localhost
-      pip:
-        name: reportlab
-        executable: pip3
-      delegate_to: localhost
-      run_once: true
-
-    ####################################################################
-    # 7️⃣ Generate PDF report
-    ####################################################################
-    - name: Generate PDF report
-      delegate_to: localhost
-      run_once: true
-      shell: |
-        python3 - <<'EOF'
-        import json
-        from reportlab.lib.pagesizes import A4
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet
-
-        pdf_path = "{{ pdf_dest }}"
-        json_file = "{{ json_temp }}"
-
-        with open(json_file) as f:
-            data = json.load(f)
-
-        doc = SimpleDocTemplate(pdf_path, pagesize=A4)
-        styles = getSampleStyleSheet()
-        story = [Paragraph('FortiGate Firewall Policies Report', styles['Title']), Spacer(1,20)]
-
-        # Policies with comments
-        story.append(Paragraph('1️⃣ Policies with Comments', styles['Heading2']))
-        story.append(Spacer(1,10))
-        for p in data.get('policies_with_comments', []):
-            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}, Comment: {p.get('comments','')}", styles['Normal']))
-            story.append(Spacer(1,5))
-
-        # Disabled policies
-        story.append(Spacer(1,15))
-        story.append(Paragraph('2️⃣ Disabled Policies', styles['Heading2']))
-        story.append(Spacer(1,10))
-        for p in data.get('disabled_policies', []):
-            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}", styles['Normal']))
-            story.append(Spacer(1,5))
-
-        # Hint=0 / Last used=N/A policies
-        story.append(Spacer(1,15))
-        story.append(Paragraph('3️⃣ Policies with Hint=0 and Last Used=N/A', styles['Heading2']))
-        story.append(Spacer(1,10))
-        for p in data.get('hint0_lastused_na_policies', []):
-            story.append(Paragraph(f"Policy ID: {p.get('policyid')}, Name: {p.get('name','No Name')}", styles['Normal']))
-            story.append(Spacer(1,5))
-
-        doc.build(story)
-        EOF
-
-    ####################################################################
-    # 8️⃣ Cleanup temporary JSON
-    ####################################################################
-    - name: Remove temporary JSON file
+    - name: Ensure output directory exists
       file:
-        path: "{{ json_temp }}"
-        state: absent
+        path: "{{ output_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      # REMOVED: No need for become, owner, or group with /tmp
+
+    - name: Get current epoch timestamp
+      command: date +%s
+      register: current_epoch_result
+      delegate_to: localhost
+
+    - name: Set current and cutoff epoch
+      set_fact:
+        current_epoch: "{{ current_epoch_result.stdout | int }}"
+        cutoff_epoch: "{{ (current_epoch_result.stdout | int) - (cutoff_days * 86400) }}"
+
+    - name: Get firewall policy list from FortiGate
+      uri:
+        url: "http://{{ ansible_host }}/api/v2/cmdb/firewall/policy?vdom={{ vdom }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ fortigate_token }}"
+        return_content: yes
+        status_code: 200
+        validate_certs: no
+      register: firewall_policies
+
+    - name: Filter unused rules (last_used = 0 or < cutoff)
+      set_fact:
+        unused_rules: >-
+          [{% for rule in firewall_policies.json.results | default([]) %}
+            {% set last_used = rule.get('last_used', 0) | int %}
+            {% if last_used == 0 or last_used < cutoff_epoch %}
+              {{ rule | combine({'last_used': last_used}) }}{% if not loop.last %},{% endif %}
+            {% endif %}
+          {% endfor %}]
+
+    - name: Convert last_used to readable date
+      set_fact:
+        converted_unused_rules: >-
+          [{% for rule in unused_rules %}
+            {% if rule.last_used != 0 %}
+              {% set human_date = lookup('pipe', 'date -d @' ~ rule.last_used ~ ' "+%Y-%m-%d"') %}
+              {{ rule | combine({'last_used': human_date}) }}{% if not loop.last %},{% endif %}
+            {% else %}
+              {{ rule | combine({'last_used': 'Never Used'}) }}{% if not loop.last %},{% endif %}
+            {% endif %}
+          {% endfor %}]
+
+    - name: Filter rules without comments
+      set_fact:
+        rules_without_comments: >-
+          {{
+            firewall_policies.json.results | selectattr('comments', 'equalto', '') | list
+          }}
+
+    - name: Filter disabled rules
+      set_fact:
+        disabled_rules: >-
+          {{
+            firewall_policies.json.results | selectattr('status', 'equalto', 'disable') | list
+          }}
+
+    - name: Save combined audit HTML report
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Combined FortiGate Firewall Audit Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              h2 { margin-top: 40px; }
+              table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f2f2f2; }
+            </style>
+          </head>
+          <body>
+            <h1>FortiGate Firewall Audit Report</h1>
+
+            <h2>1. Unused Rules (Last {{ cutoff_days }} days)</h2>
+            {% if converted_unused_rules | length > 0 %}
+            <table>
+              <tr><th>ID</th><th>Name</th><th>Last Used</th><th>Bytes</th><th>Comments</th></tr>
+              {% for rule in converted_unused_rules %}
+              <tr>
+                <td>{{ rule.policyid }}</td>
+                <td>{{ rule.name }}</td>
+                <td>{{ rule.last_used }}</td>
+                <td>{{ rule.bytes | default('N/A') }}</td>
+                <td>{{ rule.comments | default('') }}</td>
+              </tr>
+              {% endfor %}
+            </table>
+            {% else %}
+            <p>✅ No unused rules found.</p>
+            {% endif %}
+
+            <h2>2. Rules Without Comments</h2>
+            {% if rules_without_comments | length > 0 %}
+            <table>
+              <tr><th>ID</th><th>Name</th><th>Src Intf</th><th>Dst Intf</th><th>Action</th></tr>
+              {% for rule in rules_without_comments %}
+              <tr>
+                <td>{{ rule.policyid }}</td>
+                <td>{{ rule.name }}</td>
+                <td>{{ rule.srcintf | map(attribute='name') | join(', ') }}</td>
+                <td>{{ rule.dstintf | map(attribute='name') | join(', ') }}</td>
+                <td>{{ rule.action }}</td>
+              </tr>
+              {% endfor %}
+            </table>
+            {% else %}
+            <p>✅ All rules have comments.</p>
+            {% endif %}
+
+            <h2>3. Disabled Rules</h2>
+            {% if disabled_rules | length > 0 %}
+            <table>
+              <tr><th>ID</th><th>Name</th><th>Status</th><th>Src Intf</th><th>Dst Intf</th><th>Comments</th></tr>
+              {% for rule in disabled_rules %}
+              <tr>
+                <td>{{ rule.policyid }}</td>
+                <td>{{ rule.name }}</td>
+                <td>{{ rule.status }}</td>
+                <td>{{ rule.srcintf | map(attribute='name') | join(', ') }}</td>
+                <td>{{ rule.dstintf | map(attribute='name') | join(', ') }}</td>
+                <td>{{ rule.comments | default('') }}</td>
+              </tr>
+              {% endfor %}
+            </table>
+            {% else %}
+            <p>✅ No disabled rules found.</p>
+            {% endif %}
+          </body>
+          </html>
+        dest: "{{ output_file }}"
+        mode: '0644'
+      delegate_to: localhost
+
+    - name: Ensure target directory exists on local machine
+      shell: >
+        sshpass -p '{{ scp_password }}'
+        ssh -o StrictHostKeyChecking=no {{ local_machine_user }}@{{ local_machine_ip }}
+        "mkdir -p {{ local_machine_path }}"
+      delegate_to: localhost
+
+    - name: Copy the HTML report to local machine
+      command: >
+        sshpass -p '{{ scp_password }}'
+        scp -o StrictHostKeyChecking=no {{ output_file }}
+        {{ local_machine_user }}@{{ local_machine_ip }}:{{ local_machine_path }}/
+      delegate_to: localhost
+
+    - name: Summary of Combined Report
+      debug:
+        msg: >
+          ✅ Report complete. {{ converted_unused_rules | length }} unused rules, 
+          {{ rules_without_comments | length }} without comments, 
+          {{ disabled_rules | length }} disabled rules.
+          Report saved to {{ output_file }} and copied to {{ local_machine_path }}.
