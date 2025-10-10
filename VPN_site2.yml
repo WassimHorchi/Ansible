@@ -21,7 +21,7 @@
           net_device: "disable"
           proposal: "des-md5"
           comments: "VPN: to site1 (Created by VPN wizard)"
-          remote_gw: "192.168.230.142"
+          remote_gw: "192.168.230.144"
           psksecret: "test12345"
 
     - name: Configure IPsec phase2-interface

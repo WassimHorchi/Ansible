@@ -15,4 +15,4 @@
       fortios_system_global:
         vdom: "{{ vdom }}"
         system_global:
-          hostname: 'Fortigate1'
+          hostname: 'Fortigate0'

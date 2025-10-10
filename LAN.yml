@@ -1,21 +1,29 @@
-- name: Configure LAN interface
+---
+- name: Configuration de l'interface port1 sur FortiGate
   hosts: Fortigate
-  gather_facts: false
   connection: httpapi
+  gather_facts: no
 
   vars:
-    vdom: "root"
-    interface_ip: "192.168.22.46/24"
+    ansible_httpapi_use_ssl: yes
+    ansible_httpapi_validate_certs: no
+    ansible_httpapi_port: 443
 
   tasks:
-    - name: Configure LAN interface
+    - name: Configurer l'interface port1
       fortinet.fortios.fortios_system_interface:
-        vdom: "{{ vdom }}"
+        vdom: "root"
         state: "present"
         system_interface:
-          name: "port2"
-          role: "lan"
-          snmp_index: 2
-          alias: "LAN"
+          name: "port1"
+          vdom: "root"
+          mode: "dhcp"
+          allowaccess:
+            - ping
+            - https
+            - ssh
+            - http
+            - fgfm
           type: "physical"
-          ip: "{{ interface_ip }}"
+          alias: "LAN"
+          snmp_index: 1

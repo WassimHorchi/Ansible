@@ -1,21 +1,31 @@
 ---
-- hosts: Fortigate
-  gather_facts: false
+- name: Configure DNS on FortiGate
+  hosts: Fortigate
   connection: httpapi
+  gather_facts: no
   collections:
     - fortinet.fortios
+
   vars:
     vdom: "root"
-    ansible_httpapi_use_ssl: true
-    ansible_httpapi_validate_certs: false
-    ansible_httpapi_port: 443
+    primary_dns: "8.8.8.8"
+    secondary_dns: "8.8.4.4"
+
   tasks:
-    - name: Configure DNS
-      fortinet.fortios.fortios_system_dns:
+    - name: Gather current DNS configuration
+      fortios_facts:
+        vdom: "{{ vdom }}"
+        selector: "system_dns"
+      register: dns_info
+
+    - name: Show current DNS
+      debug:
+        var: dns_info
+
+    - name: Set new DNS servers
+      fortios_system_dns:
         vdom: "{{ vdom }}"
         system_dns:
-          primary: "8.8.8.8"
-          secondary: "8.8.4.4"
-          cache_notfound_responses: "disable"
-          dns_cache_limit: "5000"
-          dns_cache_ttl: "1800"
+          primary: "{{ primary_dns }}"
+          secondary: "{{ secondary_dns }}"
+          dns_over_tls: disable

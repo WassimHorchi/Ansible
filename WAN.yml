@@ -1,6 +1,6 @@
 ---
 - name: Configure FortiGate WAN interface
-  hosts: Fortigate02
+  hosts: Fortigate
   gather_facts: false
 
   vars:
