@@ -7,7 +7,7 @@
   vars:
     vdom: "root"
     cutoff_days: 10
-    fortigate_token: "NyNpsw7p7bn9w57mnmsgk6nbkpw7hH"
+    fortigate_token: "ks5z94n5s7QHx3tp010s3t5mbzj47H"
     scp_password: "Fodha123*"
     local_machine_ip: "192.168.230.139"
     local_machine_user: "wassim"
